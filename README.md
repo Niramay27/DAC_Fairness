@@ -1,9 +1,6 @@
 # DAC_Fairness
 
 This repository investigates **fairness and bias properties of the Descript Audio Codec (DAC)** by probing whether **discrete acoustic codebooks encode gender-specific or semantically separable information**.
-
-This work is based on **Sections 4.4–4.7** of my internship report and focuses on understanding the internal **Residual Vector Quantization (RVQ)** token representations used in modern text-to-speech (TTS) systems such as **ParlerTTS**.
-
 ---
 
 ## Motivation
