@@ -1,189 +1,206 @@
-# Descript Audio Codec (.dac): High-Fidelity Audio Compression with Improved RVQGAN
+# DAC_Fairness
 
-This repository contains training and inference scripts
-for the Descript Audio Codec (.dac), a high fidelity general
-neural audio codec, introduced in the paper titled **High-Fidelity Audio Compression with Improved RVQGAN**.
+This repository investigates **fairness and bias properties of the Descript Audio Codec (DAC)** by probing whether **discrete acoustic codebooks encode gender-specific or semantically separable information**.
 
-![](https://static.arxiv.org/static/browse/0.3.4/images/icons/favicon-16x16.png) [arXiv Paper: High-Fidelity Audio Compression with Improved RVQGAN
-](http://arxiv.org/abs/2306.06546) <br>
-📈 [Demo Site](https://descript.notion.site/Descript-Audio-Codec-11389fce0ce2419891d6591a68f814d5)<br>
-⚙ [Model Weights](https://github.com/descriptinc/descript-audio-codec/releases/download/0.0.1/weights.pth)
+This work is based on **Sections 4.4–4.7** of my internship report and focuses on understanding the internal **Residual Vector Quantization (RVQ)** token representations used in modern text-to-speech (TTS) systems such as **ParlerTTS**.
 
-👉 With Descript Audio Codec, you can compress **44.1 KHz audio** into discrete codes at a **low 8 kbps bitrate**.  <br>
-🤌 That's approximately **90x compression** while maintaining exceptional fidelity and minimizing artifacts.  <br>
-💪 Our universal model works on all domains (speech, environment, music, etc.), making it widely applicable to generative modeling of all audio.  <br>
-👌 It can be used as a drop-in replacement for EnCodec for all audio language modeling applications (such as AudioLMs, MusicLMs, MusicGen, etc.) <br>
+---
 
-<p align="center">
-<img src="./assets/comparsion_stats.png" alt="Comparison of compressions approaches. Our model achieves a higher compression factor compared to all baseline methods. Our model has a ~90x compression factor compared to 32x compression factor of EnCodec and 64x of SoundStream. Note that we operate at a target bitrate of 8 kbps, whereas EnCodec operates at 24 kbps and SoundStream at 6 kbps. We also operate at 44.1 kHz, whereas EnCodec operates at 48 kHz and SoundStream operates at 24 kHz." width=35%></p>
+## Motivation
 
+Modern TTS systems combine large language models with neural audio codecs to generate expressive and controllable speech. While bias in language models has been extensively studied, **bias propagation through audio codecs remains largely unexplored**.
 
-## Usage
+DAC is widely used as a backend for speech generation. If its discrete codebooks encode demographic attributes (e.g., gender), such biases could propagate invisibly into downstream generative models.
 
-### Installation
+This repository explores the following question:
+
+> **Do DAC codebooks encode gender-specific acoustic patterns in a separable or interpretable way?**
+
+---
+
+## Understanding the DAC Model (Section 4.4)
+
+ParlerTTS uses a **Deep Acoustic Codec (DAC)**—similar in spirit to Encodec—for discretizing and reconstructing waveform audio.
+
+### DAC Architecture Overview
+
+- **Encoder**: Maps continuous audio into latent representations
+- **Residual Vector Quantization (RVQ)**:
+  - Multiple quantization stages (L codebooks)
+  - Each stage outputs a discrete token
+  - Final representation is the sum of embeddings across stages
+- **Decoder**: Reconstructs waveform audio from discrete tokens
+
+### Key Characteristics
+
+- **Multi-stage RVQ**: Captures progressively finer acoustic details
+- **Token Vocabulary Size**: Typically 1024–2048 entries per codebook
+- **Latent Dimensionality**: ~128D per token
+- **Objective**: High-fidelity audio reconstruction, not interpretability
+
+Each token represents a compressed spectral-acoustic feature chunk. These tokens are concatenated over time to synthesize complete audio signals.
+
+---
+
+## Hypothesis and Experimental Setup (Section 4.5)
+
+### Hypothesis
+
+If gender-specific acoustic characteristics (e.g., pitch, timbre, articulation) are encoded in DAC codebooks, then:
+
+- **Swapping gender words in prompts** should yield
+- **Systematically different RVQ token distributions**, especially in early codebooks
+
+### Experimental Design
+
+1. Use identical descriptive prompts while **changing only the gender term**
+   - Example:  
+     _“A confident **female** engineer speaking in Delhi Hindi”_  
+     vs  
+     _“A confident **male** engineer speaking in Delhi Hindi”_
+
+2. Generate speech using ParlerTTS
+3. Intercept the **RVQ token embeddings** produced by the GPT decoder
+4. Analyze and visualize token distributions across gender-altered prompts
+
+The goal is to determine whether **token-level separation or clustering** emerges.
+
+---
+
+## Findings and Visualizations (Section 4.6)
+
+### Token Extraction
+
+- Each RVQ token corresponds to a **128-dimensional embedding**
+- Tokens were collected across multiple generations and prompts
+
+### Dimensionality Reduction
+
+To visualize the high-dimensional token space:
+
+- **PCA** for linear structure
+- **UMAP** for nonlinear neighborhood preservation
+
+### Clustering Methods
+
+- Hierarchical clustering
+- HDBSCAN (density-based clustering)
+- Silhouette score analysis for cluster quality
+
+### Observations
+
+- Token distributions were **highly uniform and entropic**
+- No consistent gender-wise separation was observed
+- Clusters were:
+  - Small in number (2–3 at most)
+  - Unstable across runs
+  - Not aligned with gender distinctions
+
+These results held across:
+- Different codebook stages
+- Different prompts
+- Different dimensionality reduction techniques
+
+### Interpretation
+
+- DAC codebooks appear optimized for **coverage and reconstruction fidelity**
+- Tokens do **not map cleanly to interpretable attributes** such as gender
+- Semantic attributes are likely **entangled or averaged out** at the codec level
+
+---
+
+## Conclusion and Project Outcome (Section 4.7)
+
+### Main Conclusion
+
+Despite an initially promising hypothesis, we find **no conclusive evidence** that DAC codebooks encode **isolated or separable gender-specific acoustic representations**.
+
+### Why the Hypothesis Failed
+
+- DAC tokens are optimized for **entropy maximization**, not disentanglement
+- Tokens represent **low-level acoustic features**, not semantic concepts
+- RVQ aggregation blurs attribute-specific signals
+- Clustering in high-dimensional token space is inherently unstable
+
+### Implications
+
+- Bias in TTS systems is more likely introduced by:
+  - Prompt encoders (e.g., T5)
+  - Autoregressive token predictors (e.g., GPT)
+- Audio codecs act as **information-preserving but semantically agnostic components**
+
+### Future Directions
+
+- Designing **interpretable discrete token spaces** for audio
+- End-to-end bias tracing across multimodal pipelines
+- Black-box probing methods for generative speech models
+
+---
+
+## Repository Structure
+
+```text
+DAC_Fairness/
+│
+├── assets/                  # Official DAC assets
+├── conf/                    # DAC configuration files
+├── dac/                     # Core DAC implementation (official)
+├── scripts/
+│   └── visualize_codebooks.ipynb   # Custom analysis notebook
+├── tests/                   # DAC test files
+│
+├── plots_codebooks/          # Codebook-level visualizations
+├── plots_hdbscan_umap/       # HDBSCAN + UMAP plots
+├── plots_heirarchical/       # Hierarchical clustering results
+├── plots_pca/                # PCA projections
+├── plots_silhouette/         # Silhouette score analyses
+│
+├── Dockerfile
+├── Dockerfile.dev
+├── docker-compose.yml
+├── requirements.txt
+├── setup.py
+├── LICENSE
+├── README.md
 ```
-pip install descript-audio-codec
-```
-OR
 
-```
-pip install git+https://github.com/descriptinc/descript-audio-codec
-```
+## Code Attribution
 
-### Weights
-Weights are released as part of this repo under MIT license.
-We release weights for models that can natively support 16 kHz, 24kHz, and 44.1kHz sampling rates.
-Weights are automatically downloaded when you first run `encode` or `decode` command. You can cache them using one of the following commands
+⚠️ **Important Notice**
+
+All code in this repository **except** the analysis notebook listed below is taken directly from the **official Descript Audio Codec (DAC) repository**.
+
+🔗 **Official DAC Repository**  
+https://github.com/descriptinc/descript-audio-codec
+
+### Custom Contributions
+
+The following components were added as part of this work:
+
+- `scripts/visualize_codebooks.ipynb`
+- Generated visualization directories:
+  - `plots_codebooks/`
+  - `plots_hdbscan_umap/`
+  - `plots_heirarchical/`
+  - `plots_pca/`
+  - `plots_silhouette/`
+
+No modifications were made to the core DAC implementation.
+
+---
+
+## How to Run
+
+Clone the repository and install dependencies:
+
 ```bash
-python3 -m dac download # downloads the default 44kHz variant
-python3 -m dac download --model_type 44khz # downloads the 44kHz variant
-python3 -m dac download --model_type 24khz # downloads the 24kHz variant
-python3 -m dac download --model_type 16khz # downloads the 16kHz variant
+git clone https://github.com/<your-username>/DAC_Fairness.git
+cd DAC_Fairness
+pip install -r requirements.txt
 ```
-We provide a Dockerfile that installs all required dependencies for encoding and decoding. The build process caches the default model weights inside the image. This allows the image to be used without an internet connection. [Please refer to instructions below.](#docker-image)
+Launch the analysis notebook:
 
-
-### Compress audio
-```
-python3 -m dac encode /path/to/input --output /path/to/output/codes
+``` bash
+jupyter notebook scripts/visualize_codebooks.ipynb
 ```
 
-This command will create `.dac` files with the same name as the input files.
-It will also preserve the directory structure relative to input root and
-re-create it in the output directory. Please use `python -m dac encode --help`
-for more options.
-
-### Reconstruct audio from compressed codes
-```
-python3 -m dac decode /path/to/output/codes --output /path/to/reconstructed_input
-```
-
-This command will create `.wav` files with the same name as the input files.
-It will also preserve the directory structure relative to input root and
-re-create it in the output directory. Please use `python -m dac decode --help`
-for more options.
-
-### Programmatic Usage
-```py
-import dac
-from audiotools import AudioSignal
-
-# Download a model
-model_path = dac.utils.download(model_type="44khz")
-model = dac.DAC.load(model_path)
-
-model.to('cuda')
-
-# Load audio signal file
-signal = AudioSignal('input.wav')
-
-# Encode audio signal as one long file
-# (may run out of GPU memory on long files)
-signal.to(model.device)
-
-x = model.preprocess(signal.audio_data, signal.sample_rate)
-z, codes, latents, _, _ = model.encode(x)
-
-# Decode audio signal
-y = model.decode(z)
-
-# Alternatively, use the `compress` and `decompress` functions
-# to compress long files.
-
-signal = signal.cpu()
-x = model.compress(signal)
-
-# Save and load to and from disk
-x.save("compressed.dac")
-x = dac.DACFile.load("compressed.dac")
-
-# Decompress it back to an AudioSignal
-y = model.decompress(x)
-
-# Write to file
-y.write('output.wav')
-```
-
-### Docker image
-We provide a dockerfile to build a docker image with all the necessary
-dependencies.
-1. Building the image.
-    ```
-    docker build -t dac .
-    ```
-2. Using the image.
-
-    Usage on CPU:
-    ```
-    docker run dac <command>
-    ```
-
-    Usage on GPU:
-    ```
-    docker run --gpus=all dac <command>
-    ```
-
-    `<command>` can be one of the compression and reconstruction commands listed
-    above. For example, if you want to run compression,
-
-    ```
-    docker run --gpus=all dac python3 -m dac encode ...
-    ```
-
-
-## Training
-The baseline model configuration can be trained using the following commands.
-
-### Pre-requisites
-Please install the correct dependencies
-```
-pip install -e ".[dev]"
-```
-
-## Environment setup
-
-We have provided a Dockerfile and docker compose setup that makes running experiments easy.
-
-To build the docker image do:
-
-```
-docker compose build
-```
-
-Then, to launch a container, do:
-
-```
-docker compose run -p 8888:8888 -p 6006:6006 dev
-```
-
-The port arguments (`-p`) are optional, but useful if you want to launch a Jupyter and Tensorboard instances within the container. The
-default password for Jupyter is `password`, and the current directory
-is mounted to `/u/home/src`, which also becomes the working directory.
-
-Then, run your training command.
-
-
-### Single GPU training
-```
-export CUDA_VISIBLE_DEVICES=0
-python scripts/train.py --args.load conf/ablations/baseline.yml --save_path runs/baseline/
-```
-
-### Multi GPU training
-```
-export CUDA_VISIBLE_DEVICES=0,1
-torchrun --nproc_per_node gpu scripts/train.py --args.load conf/ablations/baseline.yml --save_path runs/baseline/
-```
-
-## Testing
-We provide two test scripts to test CLI + training functionality. Please
-make sure that the trainig pre-requisites are satisfied before launching these
-tests. To launch these tests please run
-```
-python -m pytest tests
-```
-
-## Results
-
-<p align="left">
-<img src="./assets/objective_comparisons.png" width=75%></p>
